@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>A Maze Generator in Go in WebAssembly</title>
+    <style>
+        @media print {
+            .noprint {display:none;}
+        }
+        
+        .settings {
+            display:grid;
+            grid-template-columns: max-content max-content max-content;
+            grid-gap:5px;
+        }
+        .settings label       { text-align:right; }
+        .settings label:after { content: ":"; }
+    </style>
+</head>
+
+<body>
+<form class="noprint">
+  <fieldset class="settings">
+    <legend>Generate a Maze</legend>
+    
+    <label for="mazeHeight">Maze Height (cells)</label>
+    <input type="range" id="mazeHeight" name="mazeHeight" min="2" max="200" value="15" oninput="this.nextElementSibling.value = this.value">
+    <output>15</output>
+    
+    <label for="mazeWidth">Maze Width (cells)</label>
+    <input type="range" id="mazeWidth" name="mazeWidth" min="2" max="200" value="15" oninput="this.nextElementSibling.value = this.value">
+    <output>15</output>
+    
+    <label for="oppositeStart">Distant Start/Finish</label>
+    <input type="checkbox" id="oppositeStart" name="oppositeStart">
+    <output></output>
+    
+    <label for="showSolution">Show Solution</label>
+    <input type="checkbox" id="showSolution" name="showSolution">
+    <output></output>
+    
+    <label for="labelMaze">Label Maze</label>
+    <input type="checkbox" id="labelMaze" name="labelMaze">
+    <output></output>
+	
+    <label for="randomSeed">Seed (0 for random)</label>
+    <input type="number" id="randomSeed" name="randomSeed" min="-9007199254740991" max="9007199254740990" value="0">
+    <output></output>
+    
+    <div>
+        <button id="generateButton" disabled>Generate</button>
+		<button id="exportButton" onclick="exportMaze(); return false;" disabled>Export as Image</button>
+	</div>
+
+  </fieldset>
+</form>
+
+<div>
+	<canvas id="targetCanvas" style="image-rendering: pixelated; image-rendering: crisp-edges;" />
+</div>
+    
+<script src="wasm_exec.js"></script>
+<script src="index.js"></script>
+
+</body>
+</html>
