@@ -12,8 +12,23 @@ import (
 	"unsafe"
 )
 
+// Simple timing functions, put
+// tr(ace(message))
+// at the top of a timed function.
+func ace(message string) (string, time.Time) {
+	return message, time.Now()
+}
+
+func tr(message string, start time.Time) {
+	fmt.Printf("%v: %v\n", message, time.Since(start))
+}
+
+// The frame buffer storing our image.
 var frameBuffer *image.RGBA = nil
 
+// Mazes are simple structures, with a slice-of-slices
+// for cells. It's not significanlty faster to use a
+// single-dimensional array.
 type maze struct {
 	start, finish position
 	height, width int
@@ -23,13 +38,14 @@ type maze struct {
 }
 
 const (
-	maxDimension  = 200
-	border        = 40
-	cellWidth     = 12
-	halfCellWidth = cellWidth / 2
-	minImageWidth = cellWidth*4 + border*2
+	maxDimension  = 200                    // Maximum number of cells in height and/or width
+	border        = 40                     // Border (in pixels) around the maze
+	cellWidth     = 12                     // Width/height (in pixels) of a single cell
+	halfCellWidth = cellWidth / 2          // Used to find the midpoint of a cell
+	minImageWidth = cellWidth*4 + border*2 // Minimum width of generated image (in pixels)
 )
 
+// Directions, and displacements to move in a given direction.
 type direction int
 
 const (
@@ -60,11 +76,15 @@ var op = map[direction]direction{
 	west:  east,
 }
 
+// A single cell.
 type cell struct {
-	visited  bool
-	openings [4]bool
+	visited  bool    // True if we've visited this cell on this walk.
+	openings [4]bool // Whether a given wall is open.
 }
 
+// Build a new maze with the given height and width.
+// Randomness is taken from the given RNG.
+// oppositeStart means to place start/end at opposing corners.
 func newMaze(height, width int, rng *rand.Rand, oppositeStart bool) *maze {
 	if width < 2 || height < 2 || rng == nil {
 		panic("invalid call to newMaze")
@@ -91,10 +111,15 @@ func newMaze(height, width int, rng *rand.Rand, oppositeStart bool) *maze {
 	}
 }
 
+// Position is simply x/y coordinates.
 type position struct {
 	x, y int
 }
 
+// We use a stack of positions when generating and solving
+// the maze. This avoids using the call stack. Go has a very
+// deep call stack on most targets, but I'm not comfortable
+// asking WASM can give us a ~1500-level stack.
 type stack []position
 
 func push(s stack, p position) stack {
@@ -114,14 +139,6 @@ func pop(s stack) stack {
 
 func empty(s stack) bool {
 	return len(s) == 0
-}
-
-func ace(message string) (string, time.Time) {
-	return message, time.Now()
-}
-
-func tr(message string, start time.Time) {
-	fmt.Printf("%v: %v\n", message, time.Since(start))
 }
 
 // We precompute all possible permutations of orders to try digging.
@@ -245,7 +262,6 @@ func vLine(img *image.RGBA, x, y1, y2 int, col image.Image) {
 	draw.Draw(img, image.Rect(x, y1, x+1, y2+1), col, image.Point{0, 0}, draw.Over)
 }
 
-// FIXME - it would be faster to draw a grid of lines and then selectively erase openings, I think
 func (m *maze) drawCell(img *image.RGBA, x, y int, c cell) {
 	if !c.openings[north] && !(x == m.start.x && y == m.start.y) {
 		hLine(img, x*cellWidth+border, y*cellWidth+border, x*cellWidth+border+cellWidth, image.Black)
@@ -264,6 +280,8 @@ func (m *maze) drawCell(img *image.RGBA, x, y int, c cell) {
 	}
 }
 
+// We import a function called putMaze, which is written in JavaScript.
+// TinyGo makes this slightly easier, but this really isn't too bad:
 var putMaze js.Value = js.Undefined()
 
 func importFunctions() {
@@ -288,6 +306,7 @@ func main() {
 	generateCb.Release()
 }
 
+// The actual function called to generate mazes.
 func generateCallback() {
 	defer tr(ace("total time"))
 
@@ -316,6 +335,7 @@ func generateCallback() {
 	export(labelText)
 }
 
+// Grab our parameters from JS land.
 func getArguments() (height, width int64, solution, label, oppositeStart bool, seed int64, err error) {
 	document := js.Global().Get("document")
 
@@ -329,8 +349,17 @@ func getArguments() (height, width int64, solution, label, oppositeStart bool, s
 	return
 }
 
+// Export the frame buffer. We invoke putMaze here, which actually
+// puts the pixel data into the canvas.
+//
+// Note that image.RGBA.Pix just happens to be in the correct format
+// for Canvas ImageData. This means that we can simply pass a pointer
+// into WASM linear memory and the JS side can pick it up with no
+// copying. We do a safe cast from the slice to the underlying array,
+// and then an unsafe cast to a uintptr, which is the offset of the
+// frame buffer in linear memory.
 func export(label string) {
-	defer tr(ace("exporting image"))
+	defer tr(ace("exporting frame buffer"))
 	putMaze.Invoke(
 		js.ValueOf(frameBuffer.Bounds().Dy()),
 		js.ValueOf(frameBuffer.Bounds().Dx()),
