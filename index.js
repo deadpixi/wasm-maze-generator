@@ -47,9 +47,16 @@ const wasmBrowserInstantiate = async (wasmModuleUrl, importObject) => {
     const fetchAndInstantiateTask = async () => {
         const wasmArrayBuffer = await fetch(wasmModuleUrl).then(response =>
                 response.arrayBuffer()
-            );
-            return WebAssembly.instantiate(wasmArrayBuffer, importObject);
-        };
+        );
+
+        var buffer = pako.ungzip(wasmArrayBuffer);
+        // A fetched response might be decompressed twice on Firefox.
+        // See https://bugzilla.mozilla.org/show_bug.cgi?id=610679
+        if (buffer[0] === 0x1f && buffer[1] === 0x8b) {
+            buffer = pako.ungzip(buffer);
+        }
+        return WebAssembly.instantiate(buffer, importObject);
+    };
     return await fetchAndInstantiateTask();
 };
 
@@ -117,7 +124,7 @@ const runWasm = async () => {
     const importObject = go.importObject;
 
     // Instantiate our wasm module
-    const wasmModule = await wasmBrowserInstantiate("twistylittlepassages", importObject);
+    const wasmModule = await wasmBrowserInstantiate("twistylittlepassages.gz", importObject);
 
     // Allow the wasm_exec go instance, bootstrap and execute our wasm module
     go.run(wasmModule.instance);
