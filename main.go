@@ -12,7 +12,7 @@ import (
 	"unsafe"
 )
 
-var graphicsBuffer *image.RGBA = nil
+var frameBuffer *image.RGBA = nil
 
 type maze struct {
 	start, finish position
@@ -124,15 +124,44 @@ func tr(message string, start time.Time) {
 	fmt.Printf("%v: %v\n", message, time.Since(start))
 }
 
+// We precompute all possible permutations of orders to try digging.
+// This speeds up maze generation by ~25% from shuffling the directions
+// on each iteration through the maze generation loop.
+var permutations = [][]direction{
+	[]direction{north, south, east, west},
+	[]direction{north, south, west, east},
+	[]direction{north, east, south, west},
+	[]direction{north, east, west, south},
+	[]direction{north, west, south, east},
+	[]direction{north, west, east, south},
+	[]direction{south, north, east, west},
+	[]direction{south, north, west, east},
+	[]direction{south, east, north, west},
+	[]direction{south, east, west, north},
+	[]direction{south, west, north, east},
+	[]direction{south, west, east, north},
+	[]direction{east, north, south, west},
+	[]direction{east, north, west, south},
+	[]direction{east, south, north, west},
+	[]direction{east, south, west, north},
+	[]direction{east, west, north, south},
+	[]direction{east, west, south, north},
+	[]direction{west, north, south, east},
+	[]direction{west, north, east, south},
+	[]direction{west, south, north, east},
+	[]direction{west, south, east, north},
+	[]direction{west, east, north, south},
+	[]direction{west, east, south, north},
+}
+
 func (m *maze) generate() {
 	defer tr(ace("generating maze"))
 
-	stack := push(nil, m.start)
+	stack := []position{m.start}
 	for !empty(stack) {
 		found := false
 		p := peek(stack)
-		dirs := []direction{north, south, east, west}
-		m.rng.Shuffle(len(dirs), func(i, j int) { dirs[i], dirs[j] = dirs[j], dirs[i] })
+		dirs := permutations[m.rng.Intn(len(permutations))]
 		for _, dir := range dirs {
 			nx, ny := p.x+dx[dir], p.y+dy[dir]
 			if nx >= 0 && nx < m.width && ny >= 0 && ny < m.height && !m.cells[ny][nx].visited {
@@ -163,20 +192,19 @@ func (m *maze) draw() *image.RGBA {
 		width = minImageWidth
 	}
 
-	// FIXME - don't reinitialize this if the size didn't change
 	bounds := image.Rect(0, 0, width, m.height*cellWidth+border*2)
-	if graphicsBuffer == nil || graphicsBuffer.Bounds() != bounds {
-		graphicsBuffer = image.NewRGBA(bounds)
+	if frameBuffer == nil || frameBuffer.Bounds() != bounds {
+		frameBuffer = image.NewRGBA(bounds)
 	}
-	fill(graphicsBuffer, 0, m.height*cellWidth+border*2, 0, width, image.White)
+	fill(frameBuffer, 0, m.height*cellWidth+border*2, 0, width, image.White)
 
 	for y, row := range m.cells {
 		for x, cell := range row {
-			m.drawCell(graphicsBuffer, x, y, cell)
+			m.drawCell(frameBuffer, x, y, cell)
 		}
 	}
 
-	return graphicsBuffer
+	return frameBuffer
 }
 
 var red = image.NewUniform(color.RGBA{255, 0, 0, 255})
@@ -184,16 +212,21 @@ var red = image.NewUniform(color.RGBA{255, 0, 0, 255})
 func (m *maze) drawPath(img *image.RGBA, path []position) {
 	defer tr(ace("drawing solution"))
 
-	prev := path[0]
-	for _, pos := range path {
-		if pos.x == prev.x && pos.y == prev.y {
-			continue // FIXME - draw a circle
-		}
+	prev := position{m.start.x, m.start.y}
+	for _, pos := range path[1:] {
 		if pos.x == prev.x {
-			vLine(img, pos.x*cellWidth+border+halfCellWidth, pos.y*cellWidth+border+halfCellWidth+1, prev.y*cellWidth+border+halfCellWidth+1, red)
+			first, last := prev, pos
+			if first.y > last.y {
+				first, last = last, first
+			}
+			vLine(img, first.x*cellWidth+border+halfCellWidth, first.y*cellWidth+border+halfCellWidth, last.y*cellWidth+border+halfCellWidth, red)
 		}
 		if pos.y == prev.y {
-			hLine(img, pos.x*cellWidth+border+halfCellWidth+1, pos.y*cellWidth+border+halfCellWidth, prev.x*cellWidth+border+halfCellWidth+1, red)
+			first, last := prev, pos
+			if first.x > last.x {
+				first, last = last, first
+			}
+			hLine(img, first.x*cellWidth+border+halfCellWidth, first.y*cellWidth+border+halfCellWidth, last.x*cellWidth+border+halfCellWidth, red)
 		}
 		prev = pos
 	}
@@ -212,6 +245,7 @@ func vLine(img *image.RGBA, x, y1, y2 int, col image.Image) {
 	draw.Draw(img, image.Rect(x, y1, x+1, y2+1), col, image.Point{0, 0}, draw.Over)
 }
 
+// FIXME - it would be faster to draw a grid of lines and then selectively erase openings, I think
 func (m *maze) drawCell(img *image.RGBA, x, y int, c cell) {
 	if !c.openings[north] && !(x == m.start.x && y == m.start.y) {
 		hLine(img, x*cellWidth+border, y*cellWidth+border, x*cellWidth+border+cellWidth, image.Black)
@@ -298,10 +332,10 @@ func getArguments() (height, width int64, solution, label, oppositeStart bool, s
 func export(label string) {
 	defer tr(ace("exporting image"))
 	putMaze.Invoke(
-		js.ValueOf(graphicsBuffer.Bounds().Dy()),
-		js.ValueOf(graphicsBuffer.Bounds().Dx()),
-		js.ValueOf(uintptr(unsafe.Pointer((*[1]uint8)(graphicsBuffer.Pix)))),
-		js.ValueOf(len(graphicsBuffer.Pix)),
+		js.ValueOf(frameBuffer.Bounds().Dy()),
+		js.ValueOf(frameBuffer.Bounds().Dx()),
+		js.ValueOf(uintptr(unsafe.Pointer((*[1]uint8)(frameBuffer.Pix)))),
+		js.ValueOf(len(frameBuffer.Pix)),
 		js.ValueOf(label),
 	)
 }

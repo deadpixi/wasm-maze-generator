@@ -70,20 +70,20 @@ function putMaze(newMazeHeight, newMazeWidth, newPointer, newSize, label) {
         lastPointer = undefined;
     }
     
-    // Rebuild the view onto the framebuffer if needed.
-    if (!pixels || lastPointer != newPointer || lastSize != newSize) {
+    // Rebuild the view onto the framebuffer if needed. FIXME - is testing byteLength sufficient?
+    if (!pixels || lastPointer != newPointer || lastSize != newSize || pixels.byteLength == 0) {
         console.log("rebuilding view ", " lastPointer = ", lastPointer, " newPointer = ", newPointer);
         pixels = new Uint8ClampedArray(
             exports.mem.buffer,
             newPointer,
             newSize
         );
-        canvasImageData.data.set(pixels);
         lastPointer = newPointer;
         lastSize = newSize;
     }
     
     // Place the image onto the canvas.
+    canvasImageData.data.set(pixels);
     canvasContext.putImageData(canvasImageData, 0, 0);
     
     // Draw the label.
