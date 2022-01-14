@@ -16,11 +16,24 @@ var canvasImageData = canvasContext.createImageData(
     canvasElement.width,
     canvasElement.height
 );
+
+// The actual pixels we're going to draw; a view onto an RGBA buffer.
 var pixels = undefined;
+
+// The dimensions of the last time we draw the image. We can avoid
+// a lot of work if we only change certain size-dependant things on
+// resize.
 var lastHeight = undefined;
 var lastWidth = undefined;
+
+// lastPointer is the last-seen offset into WASM linear memory of
+// the frame buffer and lastSize is the last-seen size of the frame buffer
+// again, we can avoid a lot of work if we only do certain things if these
+// change
 var lastPointer = undefined;
 var lastSize = undefined;
+
+// The ImageData we use to populate the canvas.
 var imageData = undefined;
 
 // Populate the initial font.
@@ -56,7 +69,7 @@ function exportMaze() {
 function putMaze(newMazeHeight, newMazeWidth, newPointer, newSize, label) {
 
     // Resize the canvas if needed.
-    if (newMazeHeight != lastHeight || newMazeWidth != lastWidth) {
+    if (newMazeHeight != lastHeight || newMazeWidth != lastWidth || !canvasImageData) {
         console.log("resizing canvas");
         canvasElement.height = newMazeHeight;
         canvasElement.width = newMazeWidth;
@@ -70,7 +83,7 @@ function putMaze(newMazeHeight, newMazeWidth, newPointer, newSize, label) {
         lastPointer = undefined;
     }
     
-    // Rebuild the view onto the framebuffer if needed. FIXME - is testing byteLength sufficient?
+    // Rebuild the view onto the framebuffer if needed. FIXME - is testing byteLength portable?
     if (!pixels || lastPointer != newPointer || lastSize != newSize || pixels.byteLength == 0) {
         console.log("rebuilding view ", " lastPointer = ", lastPointer, " newPointer = ", newPointer);
         pixels = new Uint8ClampedArray(
