@@ -11,4 +11,4 @@ twistylittlepassages.gz: twistylittlepassages
 
 clean:
 	go clean
-	rm -f wasm_exec.js
+	rm -f wasm_exec.js twistylittlepassages twistylittlepassages.gz

@@ -229,7 +229,7 @@ var red = image.NewUniform(color.RGBA{255, 0, 0, 255})
 func (m *maze) drawPath(img *image.RGBA, path []position) {
 	defer tr(ace("drawing solution"))
 
-	prev := position{m.start.x, m.start.y}
+	prev := path[0]
 	for _, pos := range path[1:] {
 		if pos.x == prev.x {
 			first, last := prev, pos
@@ -282,28 +282,22 @@ func (m *maze) drawCell(img *image.RGBA, x, y int, c cell) {
 
 // We import a function called putMaze, which is written in JavaScript.
 // TinyGo makes this slightly easier, but this really isn't too bad:
-var putMaze js.Value = js.Undefined()
-
-func importFunctions() {
-	putMaze = js.Global().Get("putMaze")
-}
+var putMaze js.Value = js.Global().Get("putMaze")
 
 func main() {
-	importFunctions()
-
 	generateCb := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		generateCallback()
 		args[0].Call("preventDefault")
 		return nil
 	})
+	defer generateCb.Release()
+
 	js.Global().Get("document").
 		Call("getElementById", "generateButton").
 		Call("addEventListener", "click", generateCb)
 
-	wait := make(chan struct{})
-	<-wait
-
-	generateCb.Release()
+	// spin a while...spin FOREVER
+	select {}
 }
 
 // The actual function called to generate mazes.
