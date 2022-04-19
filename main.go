@@ -55,30 +55,39 @@ const (
 	west
 )
 
-var dx = map[direction]int{
-	north: 0,
-	south: 0,
-	east:  1,
-	west:  -1,
+func (d direction) translate(p position, m *maze) position {
+	switch d {
+	case north:
+		if p.y > 0 {
+			return position{x: p.x, y: p.y - 1}
+		}
+	case south:
+		if p.y < m.height {
+			return position{x: p.x, y: p.y + 1}
+		}
+	case west:
+		if p.x > 0 {
+			return position{x: p.x - 1, y: p.y}
+		}
+	case east:
+		if p.x < m.width {
+			return position{x: p.x + 1, y: p.y}
+		}
+	}
+	return p
 }
 
-var dy = map[direction]int{
-	north: -1,
-	south: +1,
-	east:  0,
-	west:  0,
-}
-
-var op = map[direction]direction{
-	north: south,
-	south: north,
-	east:  west,
-	west:  east,
+func (d direction) opposite() direction {
+	return map[direction]direction{
+		north: south,
+		south: north,
+		east:  west,
+		west:  east,
+	}[d]
 }
 
 // A single cell.
 type cell struct {
-	visited  bool    // True if we've visited this cell on this walk.
 	openings [4]bool // Whether a given wall is open.
 }
 
@@ -120,25 +129,33 @@ type position struct {
 // the maze. This avoids using the call stack. Go has a very
 // deep call stack on most targets, but I'm not comfortable
 // asking WASM can give us a ~1500-level stack.
-type stack []position
-
-func push(s stack, p position) stack {
-	return append(s, p)
+type stack struct {
+	stack []position
 }
 
-func peek(s stack) position {
-	if len(s) == 0 {
+func (s *stack) push(p position) {
+	s.stack = append(s.stack, p)
+}
+
+func (s stack) peek() position {
+	if len(s.stack) == 0 {
 		panic("stack underflow")
 	}
-	return s[len(s)-1]
+	return s.stack[len(s.stack)-1]
 }
 
-func pop(s stack) stack {
-	return s[:len(s)-1]
+func (s *stack) pop() position {
+	p := s.peek()
+	s.stack = s.stack[:len(s.stack)-1]
+	return p
 }
 
-func empty(s stack) bool {
-	return len(s) == 0
+func (s stack) empty() bool {
+	return len(s.stack) == 0
+}
+
+func (s stack) len() int {
+	return len(s.stack)
 }
 
 // We precompute all possible permutations of orders to try digging.
@@ -171,32 +188,42 @@ var permutations = [][]direction{
 	[]direction{west, east, south, north},
 }
 
+type visitedMap map[position]bool
+
+func (m visitedMap) contains(p position) (ok bool) {
+	_, ok = m[p]
+	return
+}
+
 func (m *maze) generate() {
 	defer tr(ace("generating maze"))
 
-	stack := []position{m.start}
-	for !empty(stack) {
+	stack := stack{[]position{m.start}}
+	visited := make(visitedMap)
+	for !stack.empty() {
 		found := false
-		p := peek(stack)
+		p := stack.peek()
 		dirs := permutations[m.rng.Intn(len(permutations))]
 		for _, dir := range dirs {
-			nx, ny := p.x+dx[dir], p.y+dy[dir]
-			if nx >= 0 && nx < m.width && ny >= 0 && ny < m.height && !m.cells[ny][nx].visited {
+			np := dir.translate(p, m)
+			nx, ny := np.x, np.y
+
+			if nx >= 0 && nx < m.width && ny >= 0 && ny < m.height && !visited.contains(np) {
 				m.cells[p.y][p.x].openings[dir] = true
-				m.cells[ny][nx].openings[op[dir]] = true
-				m.cells[ny][nx].visited = true
-				stack = push(stack, position{nx, ny})
+				m.cells[ny][nx].openings[dir.opposite()] = true
+				visited[np] = true
+				stack.push(position{nx, ny})
 				found = true
-				if nx == m.finish.x && ny == m.finish.y && (len(m.solution) == 0 || len(stack) < len(m.solution)) {
-					m.solution = make([]position, len(stack))
-					copy(m.solution, stack)
+				if nx == m.finish.x && ny == m.finish.y && (len(m.solution) == 0 || stack.len() < len(m.solution)) {
+					m.solution = make([]position, stack.len())
+					copy(m.solution, stack.stack)
 				}
 				break
 			}
 		}
 
 		if !found {
-			stack = pop(stack)
+			stack.pop()
 		}
 	}
 }
@@ -297,6 +324,9 @@ func main() {
 		Call("addEventListener", "click", generateCb)
 
 	// spin a while...spin FOREVER
+	// we do this so that we don't fall off the end of main and collect
+	// garbage, which could move our framebuffer pointer or do other
+	// breaking things
 	select {}
 }
 
