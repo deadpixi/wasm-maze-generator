@@ -35,8 +35,8 @@ type maze struct {
 	solution      []position
 }
 
-func (m *maze) at(x, y int) *cell {
-	return &m.cells[y*m.width+x]
+func (m *maze) at(p position) *cell {
+	return &m.cells[p.y*m.width+p.x]
 }
 
 const (
@@ -203,15 +203,13 @@ func (m *maze) generate() {
 		dirs := permutations[m.rng.Intn(len(permutations))]
 		for _, dir := range dirs {
 			np := dir.translate(p, m)
-			nx, ny := np.x, np.y
-
-			if nx >= 0 && nx < m.width && ny >= 0 && ny < m.height && !visited.contains(np) {
-				m.at(p.x, p.y).openings[dir] = true
-				m.at(nx, ny).openings[dir.opposite()] = true
+			if !visited.contains(np) {
+				m.at(p).openings[dir] = true
+				m.at(np).openings[dir.opposite()] = true
 				visited[np] = true
-				stack.push(position{nx, ny})
+				stack.push(np)
 				found = true
-				if nx == m.finish.x && ny == m.finish.y && (len(m.solution) == 0 || stack.len() < len(m.solution)) {
+				if np == m.finish && (len(m.solution) == 0 || stack.len() < len(m.solution)) {
 					m.solution = make([]position, stack.len())
 					copy(m.solution, stack.stack)
 				}
@@ -241,7 +239,7 @@ func (m *maze) draw() *image.RGBA {
 
 	for y := 0; y < m.height; y++ {
 		for x := 0; x < m.width; x++ {
-			m.drawCell(frameBuffer, x, y, m.at(x, y))
+			m.drawCell(frameBuffer, x, y, m.at(position{x: x, y: y}))
 		}
 	}
 
