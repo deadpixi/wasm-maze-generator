@@ -209,6 +209,7 @@ func (m *maze) generate() {
 				visited[np] = true
 				stack.push(np)
 				found = true
+				// if we found a shorter solution, update the solution for later
 				if np == m.finish && (len(m.solution) == 0 || stack.len() < len(m.solution)) {
 					m.solution = make([]position, stack.len())
 					copy(m.solution, stack.stack)
