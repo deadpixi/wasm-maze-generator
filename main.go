@@ -26,15 +26,17 @@ func tr(message string, start time.Time) {
 // The frame buffer storing our image.
 var frameBuffer *image.RGBA = nil
 
-// Mazes are simple structures, with a slice-of-slices
-// for cells. It's not significanlty faster to use a
-// single-dimensional array.
+// Mazes are simple structures.
 type maze struct {
 	start, finish position
 	height, width int
-	cells         [][]cell
+	cells         []cell
 	rng           *rand.Rand
 	solution      []position
+}
+
+func (m *maze) at(x, y int) *cell {
+	return &m.cells[y*m.width+x]
 }
 
 const (
@@ -99,11 +101,6 @@ func newMaze(height, width int, rng *rand.Rand, oppositeStart bool) *maze {
 		panic("invalid call to newMaze")
 	}
 
-	cells := make([][]cell, height)
-	for i := range cells {
-		cells[i] = make([]cell, width)
-	}
-
 	start := position{rng.Intn(width), 0}
 	end := position{rng.Intn(width), height - 1}
 	if oppositeStart {
@@ -115,7 +112,7 @@ func newMaze(height, width int, rng *rand.Rand, oppositeStart bool) *maze {
 		finish: end,
 		height: height,
 		width:  width,
-		cells:  cells,
+		cells:  make([]cell, height*width),
 		rng:    rng,
 	}
 }
@@ -209,8 +206,8 @@ func (m *maze) generate() {
 			nx, ny := np.x, np.y
 
 			if nx >= 0 && nx < m.width && ny >= 0 && ny < m.height && !visited.contains(np) {
-				m.cells[p.y][p.x].openings[dir] = true
-				m.cells[ny][nx].openings[dir.opposite()] = true
+				m.at(p.x, p.y).openings[dir] = true
+				m.at(nx, ny).openings[dir.opposite()] = true
 				visited[np] = true
 				stack.push(position{nx, ny})
 				found = true
@@ -242,9 +239,9 @@ func (m *maze) draw() *image.RGBA {
 	}
 	fill(frameBuffer, 0, m.height*cellWidth+border*2, 0, width, image.White)
 
-	for y, row := range m.cells {
-		for x, cell := range row {
-			m.drawCell(frameBuffer, x, y, cell)
+	for y := 0; y < m.height; y++ {
+		for x := 0; x < m.width; x++ {
+			m.drawCell(frameBuffer, x, y, m.at(x, y))
 		}
 	}
 
@@ -289,7 +286,7 @@ func vLine(img *image.RGBA, x, y1, y2 int, col image.Image) {
 	draw.Draw(img, image.Rect(x, y1, x+1, y2+1), col, image.Point{0, 0}, draw.Over)
 }
 
-func (m *maze) drawCell(img *image.RGBA, x, y int, c cell) {
+func (m *maze) drawCell(img *image.RGBA, x, y int, c *cell) {
 	if !c.openings[north] && !(x == m.start.x && y == m.start.y) {
 		hLine(img, x*cellWidth+border, y*cellWidth+border, x*cellWidth+border+cellWidth, image.Black)
 	}
