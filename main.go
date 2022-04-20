@@ -192,6 +192,11 @@ func (m visitedMap) contains(p position) (ok bool) {
 	return
 }
 
+func (m *maze) carve(p position, d direction) {
+	m.at(p).openings[d] = true
+	m.at(d.translate(p, m)).openings[d.opposite()] = true
+}
+
 func (m *maze) generate() {
 	defer tr(ace("generating maze"))
 
@@ -204,8 +209,7 @@ func (m *maze) generate() {
 		for _, dir := range dirs {
 			np := dir.translate(p, m)
 			if !visited.contains(np) {
-				m.at(p).openings[dir] = true
-				m.at(np).openings[dir.opposite()] = true
+				m.carve(p, dir)
 				visited[np] = true
 				stack.push(np)
 				found = true
