@@ -33,7 +33,6 @@ type maze struct {
 	height, width int
 	cells         []cell
 	rng           *rand.Rand
-	solution      []position
 }
 
 func (m *maze) at(p position) *cell {
@@ -128,7 +127,7 @@ type position struct {
 // We use a stack of positions when generating and solving
 // the maze. This avoids using the call stack. Go has a very
 // deep call stack on most targets, but I'm not comfortable
-// asking WASM can give us a ~1500-level stack.
+// asking WASM to give us a ~1500-level stack.
 type stack struct {
 	stack []position
 }
@@ -218,11 +217,6 @@ func (m *maze) generate() {
 				visited[np] = true
 				stack.push(np)
 				found = true
-				// if we found a shorter solution, update the solution for later
-				if np == m.finish && (len(m.solution) == 0 || stack.len() < len(m.solution)) {
-					m.solution = make([]position, stack.len())
-					copy(m.solution, stack.stack)
-				}
 				break
 			}
 		}
@@ -234,6 +228,33 @@ func (m *maze) generate() {
 
 	m.at(m.start).openings[north] = true
 	m.at(m.finish).openings[south] = true
+}
+
+func (m maze) solve() []position {
+	defer tr(ace("solving maze"))
+
+	stack := stack{[]position{m.start}}
+	visited := make(visitedMap)
+	visited[m.start] = true
+
+FOO:
+	for !stack.empty() {
+		if visited.contains(m.finish) {
+			return stack.stack
+		}
+
+		pos := stack.peek()
+		for _, dir := range []direction{north, south, east, west} {
+			if np, err := dir.translate(pos, &m); err == nil && !visited.contains(np) && m.at(pos).openings[dir] {
+				visited[np] = true
+				stack.push(np)
+				continue FOO
+			}
+		}
+		stack.pop()
+	}
+
+	panic("maze has no solution")
 }
 
 func (m *maze) draw() *image.RGBA {
@@ -357,7 +378,7 @@ func generateCallback() {
 
 	img := m.draw()
 	if solution {
-		m.drawPath(img, m.solution)
+		m.drawPath(img, m.solve())
 	}
 
 	labelText := ""
