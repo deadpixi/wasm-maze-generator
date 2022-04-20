@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -57,26 +58,28 @@ const (
 	west
 )
 
-func (d direction) translate(p position, m *maze) position {
+var outOfBounds = errors.New("out of bounds")
+
+func (d direction) translate(p position, m *maze) (position, error) {
 	switch d {
 	case north:
 		if p.y > 0 {
-			return position{x: p.x, y: p.y - 1}
+			return position{x: p.x, y: p.y - 1}, nil
 		}
 	case south:
-		if p.y < m.height {
-			return position{x: p.x, y: p.y + 1}
+		if p.y < m.height-1 {
+			return position{x: p.x, y: p.y + 1}, nil
 		}
 	case west:
 		if p.x > 0 {
-			return position{x: p.x - 1, y: p.y}
+			return position{x: p.x - 1, y: p.y}, nil
 		}
 	case east:
-		if p.x < m.width {
-			return position{x: p.x + 1, y: p.y}
+		if p.x < m.width-1 {
+			return position{x: p.x + 1, y: p.y}, nil
 		}
 	}
-	return p
+	return p, outOfBounds
 }
 
 func (d direction) opposite() direction {
@@ -194,7 +197,9 @@ func (m visitedMap) contains(p position) (ok bool) {
 
 func (m *maze) carve(p position, d direction) {
 	m.at(p).openings[d] = true
-	m.at(d.translate(p, m)).openings[d.opposite()] = true
+	if np, err := d.translate(p, m); err == nil {
+		m.at(np).openings[d.opposite()] = true
+	}
 }
 
 func (m *maze) generate() {
@@ -207,8 +212,8 @@ func (m *maze) generate() {
 		p := stack.peek()
 		dirs := permutations[m.rng.Intn(len(permutations))]
 		for _, dir := range dirs {
-			np := dir.translate(p, m)
-			if !visited.contains(np) {
+			np, err := dir.translate(p, m)
+			if err == nil && !visited.contains(np) {
 				m.carve(p, dir)
 				visited[np] = true
 				stack.push(np)
@@ -226,6 +231,9 @@ func (m *maze) generate() {
 			stack.pop()
 		}
 	}
+
+	m.at(m.start).openings[north] = true
+	m.at(m.finish).openings[south] = true
 }
 
 func (m *maze) draw() *image.RGBA {
@@ -290,11 +298,11 @@ func vLine(img *image.RGBA, x, y1, y2 int, col image.Image) {
 }
 
 func (m *maze) drawCell(img *image.RGBA, x, y int, c *cell) {
-	if !c.openings[north] && !(x == m.start.x && y == m.start.y) {
+	if !c.openings[north] {
 		hLine(img, x*cellWidth+border, y*cellWidth+border, x*cellWidth+border+cellWidth, image.Black)
 	}
 
-	if !c.openings[south] && !(x == m.finish.x && y == m.finish.y) {
+	if !c.openings[south] {
 		hLine(img, x*cellWidth+border, y*cellWidth+border+cellWidth, x*cellWidth+border+cellWidth, image.Black)
 	}
 
