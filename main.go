@@ -230,6 +230,8 @@ func (m *maze) generate() {
 	m.at(m.finish).openings[south] = true
 }
 
+// Solve via depth-first search.
+// Use the same stack mechanism as the maze generator.
 func (m maze) solve() []position {
 	defer tr(ace("solving maze"))
 
@@ -237,7 +239,7 @@ func (m maze) solve() []position {
 	visited := make(visitedMap)
 	visited[m.start] = true
 
-FOO:
+SEARCH:
 	for !stack.empty() {
 		if visited.contains(m.finish) {
 			return stack.stack
@@ -248,7 +250,7 @@ FOO:
 			if np, err := dir.translate(pos, &m); err == nil && !visited.contains(np) && m.at(pos).openings[dir] {
 				visited[np] = true
 				stack.push(np)
-				continue FOO
+				continue SEARCH
 			}
 		}
 		stack.pop()
@@ -257,6 +259,7 @@ FOO:
 	panic("maze has no solution")
 }
 
+// Draw the maze to an image.
 func (m *maze) draw() *image.RGBA {
 	defer tr(ace("drawing maze"))
 
@@ -280,8 +283,14 @@ func (m *maze) draw() *image.RGBA {
 	return frameBuffer
 }
 
+// Preallocate the red image; this is what we use as a
+// stamp to draw our solution if requested.
 var red = image.NewUniform(color.RGBA{255, 0, 0, 255})
 
+// Draw the solution path.
+// Note that we sort our origin and destination points
+// so that we don't have any gaps and it's a nice smooth
+// connected path.
 func (m *maze) drawPath(img *image.RGBA, path []position) {
 	defer tr(ace("drawing solution"))
 
@@ -305,19 +314,23 @@ func (m *maze) drawPath(img *image.RGBA, path []position) {
 	}
 }
 
+// Fill the image with a given color.
 func fill(img *image.RGBA, y0, y1, x0, x1 int, color color.Color) {
 	defer tr(ace("clearing image"))
 	draw.Draw(img, img.Bounds(), &image.Uniform{color}, image.Point{0, 0}, draw.Src)
 }
 
+// Draw a horizontal line from p1 -> p2.
 func hLine(img *image.RGBA, x1, y, x2 int, col image.Image) {
 	draw.Draw(img, image.Rect(x1, y, x2+1, y+1), col, image.Point{0, 0}, draw.Over)
 }
 
+// Draw a vertical line from p1 -> p2.
 func vLine(img *image.RGBA, x, y1, y2 int, col image.Image) {
 	draw.Draw(img, image.Rect(x, y1, x+1, y2+1), col, image.Point{0, 0}, draw.Over)
 }
 
+// Draw an individual cell.
 func (m *maze) drawCell(img *image.RGBA, x, y int, c *cell) {
 	if !c.openings[north] {
 		hLine(img, x*cellWidth+border, y*cellWidth+border, x*cellWidth+border+cellWidth, image.Black)
